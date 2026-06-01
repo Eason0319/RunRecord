@@ -1,29 +1,28 @@
 // 在檔案最頂部加上這兩行 import
-import { RouteProp } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
 import {
-    Dimensions,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Dimensions,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { RootStackParamList } from './App';
 // 1. 新增從這裡引入 SafeAreaProvider 與 SafeAreaView
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { router, useLocalSearchParams } from 'expo-router';
 import {
-    Activity,
-    AlertTriangle,
-    Brain,
-    Calendar,
-    Compass,
-    TrendingUp,
-    User,
-    Zap
+  Activity,
+  AlertTriangle,
+  Brain,
+  Calendar,
+  Compass,
+  TrendingUp,
+  User,
+  Zap
 } from 'lucide-react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -32,16 +31,16 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const heartRateData = [120, 135, 155, 142, 168, 175, 160, 145, 150, 140];
 
-// 在 export default function App() 改為：
-type Props = {
-  navigation: NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
-  route: RouteProp<RootStackParamList, 'Dashboard'>;
+const logout = async () => {
+  await AsyncStorage.removeItem('strava_token');
+  router.replace('/');
 };
+// 在 export default function App() 改為：
 
-export default function App({ route }: Props) {
-  const { accessToken } = route.params; // 可在這裡使用 token 呼叫 Strava API
+export default function Dashboard({ route }: any) {
+  const { accessToken } = useLocalSearchParams<{ accessToken: string }>();
   const [activeTab, setActiveTab] = useState('dashboard');
-  
+
   return (
     // 2. 在最外層包裝 SafeAreaProvider
     <SafeAreaProvider>
@@ -60,16 +59,17 @@ export default function App({ route }: Props) {
         {/* 3. 這裡的 SafeAreaView 現在是來自新套件 */}
         <SafeAreaView style={styles.safeArea}>
           <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-            
+
             {/* Header 頂部導覽 */}
             <View style={styles.header}>
               <View>
                 <Text style={styles.greeting}>晚安, 跑者</Text>
                 <Text style={styles.subGreeting}>AI 已同步您今日的 Strava 記錄</Text>
               </View>
-              <View style={styles.avatar}>
+              {/* 點頭像即可登出 */}
+              <TouchableOpacity style={styles.avatar} onPress={logout}>
                 <User color="#fff" size={20} />
-              </View>
+              </TouchableOpacity>
             </View>
 
             {/* Strava 數據主卡片 */}
