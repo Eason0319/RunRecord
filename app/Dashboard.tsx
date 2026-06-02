@@ -197,9 +197,9 @@ export default function Dashboard({ route }: any) {
             <Text style={[styles.tabLabel, activeTab === 'dashboard' && styles.tabLabelActive]}>總覽</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.tabItem} onPress={() => setActiveTab('ai')}>
-            <Brain color={activeTab === 'ai' ? '#d946ef' : '#94a3b8'} size={24} />
-            <Text style={[styles.tabLabel, activeTab === 'ai' && styles.tabLabelActive]}>AI 教練</Text>
+          <TouchableOpacity style={styles.tabItem} onPress={() => router.push('./records')}>
+            <Activity color={activeTab === 'ai' ? '#d946ef' : '#94a3b8'} size={24} />
+            <Text style={[styles.tabLabel, activeTab === 'ai' && styles.tabLabelActive]}>紀錄</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.tabItem} onPress={() => setActiveTab('explore')}>

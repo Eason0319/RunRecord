@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AuthSession from 'expo-auth-session';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -58,7 +59,8 @@ export default function StravaAuth() {
       });
       const data = await res.json();
       if (data.access_token) {
-        // ✅ 用 Expo Router 跳轉，token 透過 query params 傳遞
+        await AsyncStorage.setItem('strava_token', data.access_token);
+        //  用 Expo Router 跳轉，token 透過 query params 傳遞
         router.replace({
           pathname: '/Dashboard',
           params: { accessToken: data.access_token },
