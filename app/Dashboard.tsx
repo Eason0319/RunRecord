@@ -20,6 +20,7 @@ import {
   Brain,
   Calendar,
   Compass,
+  NotebookText,
   TrendingUp,
   User,
   Zap
@@ -198,7 +199,7 @@ export default function Dashboard({ route }: any) {
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.tabItem} onPress={() => router.push('./records')}>
-            <Activity color={activeTab === 'ai' ? '#d946ef' : '#94a3b8'} size={24} />
+            <NotebookText color={activeTab === 'ai' ? '#d946ef' : '#94a3b8'} size={24} />
             <Text style={[styles.tabLabel, activeTab === 'ai' && styles.tabLabelActive]}>紀錄</Text>
           </TouchableOpacity>
 

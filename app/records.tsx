@@ -1,17 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
 import { Activity, Clock, TrendingUp, Zap } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Dimensions,
-    RefreshControl,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text, TouchableOpacity, View
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
@@ -139,70 +139,79 @@ export default function Records() {
                 </View>
               ) : (
                 activities.map((activity) => (
-                  <BlurView key={activity.id} intensity={25} tint="dark" style={styles.card}>
-                    {/* 卡片頂部：名稱 + 日期 */}
-                    <View style={styles.cardTop}>
-                      <Text style={styles.activityName} numberOfLines={1}>
-                        {activity.name}
-                      </Text>
-                      <Text style={styles.activityDate}>
-                        {formatDate(activity.start_date_local)}
-                      </Text>
-                    </View>
+                  <TouchableOpacity
+                    key={activity.id}
+                    onPress={() => router.push({
+                      pathname: './records_detail',
+                      params: { activityId: activity.id }
+                    })}
+                    activeOpacity={0.8}
+                  >
+                    <BlurView key={activity.id} intensity={25} tint="dark" style={styles.card}>
+                      {/* 卡片頂部：名稱 + 日期 */}
+                      <View style={styles.cardTop}>
+                        <Text style={styles.activityName} numberOfLines={1}>
+                          {activity.name}
+                        </Text>
+                        <Text style={styles.activityDate}>
+                          {formatDate(activity.start_date_local)}
+                        </Text>
+                      </View>
 
-                    {/* 主要數據 */}
-                    <View style={styles.statsRow}>
-                      <View style={styles.statItem}>
-                        <Text style={styles.statValue}>
-                          {(activity.distance / 1000).toFixed(2)}
-                        </Text>
-                        <Text style={styles.statLabel}>公里</Text>
+                      {/* 主要數據 */}
+                      <View style={styles.statsRow}>
+                        <View style={styles.statItem}>
+                          <Text style={styles.statValue}>
+                            {(activity.distance / 1000).toFixed(2)}
+                          </Text>
+                          <Text style={styles.statLabel}>公里</Text>
+                        </View>
+                        <View style={styles.divider} />
+                        <View style={styles.statItem}>
+                          <Text style={styles.statValue}>
+                            {formatDuration(activity.moving_time)}
+                          </Text>
+                          <Text style={styles.statLabel}>時間</Text>
+                        </View>
+                        <View style={styles.divider} />
+                        <View style={styles.statItem}>
+                          <Text style={styles.statValue}>
+                            {speedToPace(activity.average_speed)}
+                          </Text>
+                          <Text style={styles.statLabel}>均速配速</Text>
+                        </View>
                       </View>
-                      <View style={styles.divider} />
-                      <View style={styles.statItem}>
-                        <Text style={styles.statValue}>
-                          {formatDuration(activity.moving_time)}
-                        </Text>
-                        <Text style={styles.statLabel}>時間</Text>
-                      </View>
-                      <View style={styles.divider} />
-                      <View style={styles.statItem}>
-                        <Text style={styles.statValue}>
-                          {speedToPace(activity.average_speed)}
-                        </Text>
-                        <Text style={styles.statLabel}>均速配速</Text>
-                      </View>
-                    </View>
 
-                    {/* 次要數據 */}
-                    <View style={styles.secondaryRow}>
-                      <View style={styles.secondaryItem}>
-                        <TrendingUp color="#94a3b8" size={13} />
-                        <Text style={styles.secondaryText}>
-                          爬升 {Math.round(activity.total_elevation_gain)} m
-                        </Text>
-                      </View>
-                      <View style={styles.secondaryItem}>
-                        <Zap color="#94a3b8" size={13} />
-                        <Text style={styles.secondaryText}>
-                          最速 {speedToPace(activity.max_speed)}
-                        </Text>
-                      </View>
-                      {activity.average_heartrate && (
+                      {/* 次要數據 */}
+                      <View style={styles.secondaryRow}>
                         <View style={styles.secondaryItem}>
-                          <Clock color="#94a3b8" size={13} />
+                          <TrendingUp color="#94a3b8" size={13} />
                           <Text style={styles.secondaryText}>
-                            均心率 {Math.round(activity.average_heartrate)} bpm
+                            爬升 {Math.round(activity.total_elevation_gain)} m
                           </Text>
                         </View>
-                      )}
-                    </View>
-                  </BlurView>
-                ))
+                        <View style={styles.secondaryItem}>
+                          <Zap color="#94a3b8" size={13} />
+                          <Text style={styles.secondaryText}>
+                            最速 {speedToPace(activity.max_speed)}
+                          </Text>
+                        </View>
+                        {activity.average_heartrate && (
+                          <View style={styles.secondaryItem}>
+                            <Clock color="#94a3b8" size={13} />
+                            <Text style={styles.secondaryText}>
+                              均心率 {Math.round(activity.average_heartrate)} bpm
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </BlurView>
+                    </TouchableOpacity>
+                    ))
               )}
-            </ScrollView>
-          )}
-        </SafeAreaView>
+                  </ScrollView>
+                )}
+            </SafeAreaView>
       </View>
     </SafeAreaProvider>
   );
