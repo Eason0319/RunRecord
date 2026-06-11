@@ -3,27 +3,29 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import {
-    Activity,
-    ArrowLeft,
-    ChevronDown,
-    ChevronUp,
-    Clock,
-    Flame,
-    Heart,
-    TrendingUp,
-    Wind,
-    Zap,
+  Activity,
+  AlertTriangle,
+  ArrowLeft,
+  Brain,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Flame,
+  Heart,
+  TrendingUp,
+  Wind,
+  Zap,
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Dimensions,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -37,6 +39,11 @@ const speedToPace = (speed: number): string => {
   const mins = Math.floor(paceSeconds / 60);
   const secs = Math.floor(paceSeconds % 60);
   return `${mins}'${secs.toString().padStart(2, '0')}"`;
+};
+
+const speedToPaceNum = (speed: number): number => {
+  if (!speed || speed === 0) return 0;
+  return Math.round(1000 / speed);
 };
 
 const formatDuration = (seconds: number): string => {
@@ -57,6 +64,12 @@ const formatDate = (dateStr: string): string => {
 const formatTime = (dateStr: string): string => {
   const date = new Date(dateStr);
   return date.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+};
+
+const downsample = (arr: number[], maxPoints = 60): number[] => {
+  if (arr.length <= maxPoints) return arr;
+  const step = Math.floor(arr.length / maxPoints);
+  return arr.filter((_, i) => i % step === 0).slice(0, maxPoints);
 };
 
 // ────────── 型別 ──────────
@@ -111,13 +124,6 @@ type Streams = {
   watts?: { data: number[] };
   temp?: { data: number[] };
   time?: { data: number[] };
-};
-
-// 每隔幾個點取一個樣本，避免圖表資料點太多
-const downsample = (arr: number[], maxPoints = 60): number[] => {
-  if (arr.length <= maxPoints) return arr;
-  const step = Math.floor(arr.length / maxPoints);
-  return arr.filter((_, i) => i % step === 0).slice(0, maxPoints);
 };
 
 // ────────── 區塊元件 ──────────
@@ -216,17 +222,225 @@ const StreamChart = ({
   );
 };
 
+// ────────── AI 分析元件 ──────────
+const AIAnalysisCard = ({
+  title,
+  icon,
+  color,
+  prompt,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  color: string;
+  prompt: string;
+}) => {
+  const [result, setResult] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const YOUR_BACKEND_URL = 'https://run-record-nine.vercel.app';
+
+const analyze = async () => {
+  setLoading(true);
+  setResult(null);
+  try {
+    const response = await fetch(`${YOUR_BACKEND_URL}/api/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+    
+    // 💡 關鍵修改：先將回傳結果當作「純文字」讀取出來
+    const rawText = await response.text();
+    console.log("伺服器原始回應狀態碼：", response.status);
+    console.log("伺服器原始回應內容：", rawText);
+
+    // 檢查 HTTP 狀態碼
+    if (!response.ok) {
+      setResult(`伺服器錯誤 (${response.status})，請查看終端機 Log。`);
+      return;
+    }
+
+    // 確定沒有錯誤後，再手動把文字轉成 JSON
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (parseError) {
+      console.log("JSON 轉換失敗");
+      setResult("後端回傳了非 JSON 的格式，請檢查 Vercel 狀態。");
+      return;
+    }
+
+    if (data.result) {
+      setResult(data.result);
+    } else {
+      setResult('無法取得分析結果');
+    }
+  } catch (e: any) {
+    console.log("連線錯誤：", e.message);
+    setResult(`連線失敗，請稍後再試`);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  return (
+    <BlurView intensity={25} tint="dark" style={styles.aiCard}>
+      <View style={styles.aiCardHeader}>
+        <View style={[styles.sectionIconBg, { backgroundColor: `${color}20` }]}>
+          {icon}
+        </View>
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+
+      {!result && !loading && (
+        <TouchableOpacity
+          style={[styles.analyzeBtn, { borderColor: color }]}
+          onPress={analyze}
+        >
+          <Text style={[styles.analyzeBtnText, { color }]}>開始分析</Text>
+        </TouchableOpacity>
+      )}
+
+      {loading && (
+        <View style={styles.aiLoading}>
+          <ActivityIndicator size="small" color={color} />
+          <Text style={styles.aiLoadingText}>AI 分析中...</Text>
+        </View>
+      )}
+
+      {result && (
+        <>
+          <Text style={styles.aiResult}>{result}</Text>
+          <TouchableOpacity style={styles.reanalyzeBtn} onPress={analyze}>
+            <Text style={styles.reanalyzeBtnText}>重新分析</Text>
+          </TouchableOpacity>
+        </>
+      )}
+    </BlurView>
+  );
+};
+
+const AIAnalysisView = ({
+  detail,
+  streams,
+}: {
+  detail: ActivityDetail;
+  streams: Streams | null;
+}) => {
+  const splitsText = detail.splits_metric
+    ?.map(s =>
+      `第${s.split}km：配速${speedToPace(s.average_speed)}、` +
+      `時間${formatDuration(s.moving_time)}、` +
+      `心率${s.average_heartrate ? Math.round(s.average_heartrate) + 'bpm' : '無'}、` +
+      `爬升${Math.round(s.elevation_difference)}m`
+    ).join('\n') ?? '無分段資料';
+
+  const cadenceData = streams?.cadence?.data ?? [];
+  const avgCadence = cadenceData.length
+    ? Math.round(cadenceData.reduce((a, b) => a + b, 0) / cadenceData.length * 2)
+    : null;
+
+  const half = Math.floor(cadenceData.length / 2);
+  const firstHalfCadence = half > 0
+    ? cadenceData.slice(0, half).reduce((a, b) => a + b, 0) / half * 2
+    : null;
+  const secondHalfCadence = half > 0
+    ? cadenceData.slice(half).reduce((a, b) => a + b, 0) / half * 2
+    : null;
+  const cadenceDrop = firstHalfCadence && secondHalfCadence
+    ? Math.round(firstHalfCadence - secondHalfCadence)
+    : null;
+
+  const resultPrompt = `你是一位專業的跑步教練與運動生理學家，請用繁體中文分析以下這次跑步表現，條列重點，每點2-3句話：
+
+【基本數據】
+距離：${(detail.distance / 1000).toFixed(2)} km
+完成時間：${formatDuration(detail.moving_time)}
+均速配速：${speedToPace(detail.average_speed)} /km
+最速配速：${speedToPace(detail.max_speed)} /km
+爬升：${Math.round(detail.total_elevation_gain)} m
+平均心率：${detail.average_heartrate ? Math.round(detail.average_heartrate) + ' bpm' : '無資料'}
+最高心率：${detail.max_heartrate ? Math.round(detail.max_heartrate) + ' bpm' : '無資料'}
+平均步頻：${avgCadence ? avgCadence + ' spm' : '無資料'}
+痛苦指數：${detail.suffer_score ?? '無資料'}
+
+【每公里分段】
+${splitsText}
+
+請分析：
+1. 配速策略評估（前後半段比較）
+2. 心率控制與有氧效率
+3. 整體表現優缺點
+4. 具體改善建議`;
+
+  const planPrompt = `你是一位專業的跑步教練，請用繁體中文根據以下這次跑步數據，規劃接下來7天的訓練課表：
+
+【本次表現】
+距離：${(detail.distance / 1000).toFixed(2)} km
+時間：${formatDuration(detail.moving_time)}
+均速配速：${speedToPace(detail.average_speed)} /km
+平均心率：${detail.average_heartrate ? Math.round(detail.average_heartrate) + ' bpm' : '無資料'}
+痛苦指數：${detail.suffer_score ?? '無資料'}
+主觀疲勞：${detail.perceived_exertion ? detail.perceived_exertion + '/10' : '無資料'}
+${detail.best_efforts?.length ? '最佳成績：' + detail.best_efforts.map(e => `${e.name} ${formatDuration(e.moving_time)}`).join('、') : ''}
+
+請提供：
+1. 恢復狀態評估
+2. 未來7天訓練課表（每天列出：類型、距離、強度、目標）
+3. 本週訓練重點`;
+
+  const injuryPrompt = `你是一位專業的運動醫學專家，請用繁體中文評估以下跑步數據的受傷風險：
+
+【數據】
+距離：${(detail.distance / 1000).toFixed(2)} km
+平均步頻：${avgCadence ? avgCadence + ' spm' : '無資料'}
+前半段步頻：${firstHalfCadence ? Math.round(firstHalfCadence) + ' spm' : '無資料'}
+後半段步頻：${secondHalfCadence ? Math.round(secondHalfCadence) + ' spm' : '無資料'}
+步頻下降幅度：${cadenceDrop !== null ? cadenceDrop + ' spm' : '無資料'}
+爬升：${Math.round(detail.total_elevation_gain)} m
+平均心率：${detail.average_heartrate ? Math.round(detail.average_heartrate) + ' bpm' : '無資料'}
+最高心率：${detail.max_heartrate ? Math.round(detail.max_heartrate) + ' bpm' : '無資料'}
+痛苦指數：${detail.suffer_score ?? '無資料'}
+
+請評估：
+1. 整體受傷風險等級（低/中/高）及原因
+2. 步頻變化的意義（疲勞程度分析）
+3. 高風險部位預測
+4. 具體預防與恢復建議`;
+
+  return (
+    <View>
+      <AIAnalysisCard
+        title="跑步結果分析"
+        icon={<Activity color="#06b6d4" size={16} />}
+        color="rgba(6,182,212,1)"
+        prompt={resultPrompt}
+      />
+      <AIAnalysisCard
+        title="訓練規劃建議"
+        icon={<TrendingUp color="#38bdf8" size={16} />}
+        color="rgba(56,189,248,1)"
+        prompt={planPrompt}
+      />
+      <AIAnalysisCard
+        title="受傷風險預測"
+        icon={<AlertTriangle color="#f43f5e" size={16} />}
+        color="rgba(244,63,94,1)"
+        prompt={injuryPrompt}
+      />
+    </View>
+  );
+};
+
 // ────────── 主頁面 ──────────
-export default function RecordsDetail() {
+export default function ActivityDetail() {
   const { activityId } = useLocalSearchParams<{ activityId: string }>();
   const [detail, setDetail] = useState<ActivityDetail | null>(null);
   const [streams, setStreams] = useState<Streams | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<'data' | 'ai'>('data');
 
-  useEffect(() => {
-    fetchAll();
-  }, []);
+  useEffect(() => { fetchAll(); }, []);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -234,7 +448,6 @@ export default function RecordsDetail() {
       const token = await AsyncStorage.getItem('strava_token');
       if (!token) { setError('找不到 Token，請重新登入'); return; }
 
-      // 同時發出兩個請求
       const [detailRes, streamsRes] = await Promise.all([
         fetch(`https://www.strava.com/api/v3/activities/${activityId}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -296,6 +509,7 @@ export default function RecordsDetail() {
           style={StyleSheet.absoluteFillObject}
         />
         <SafeAreaView style={styles.safeArea}>
+
           {/* Header */}
           <View style={styles.topHeader}>
             <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -309,160 +523,156 @@ export default function RecordsDetail() {
             </View>
           </View>
 
+          {/* 切換列 */}
+          <View style={styles.toggleBar}>
+            <TouchableOpacity
+              style={[styles.toggleBtn, activeView === 'data' && styles.toggleBtnActive]}
+              onPress={() => setActiveView('data')}
+            >
+              <Activity color={activeView === 'data' ? '#06b6d4' : '#64748b'} size={15} />
+              <Text style={[styles.toggleText, activeView === 'data' && styles.toggleTextActive]}>
+                數據
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleBtn, activeView === 'ai' && styles.toggleBtnActive]}
+              onPress={() => setActiveView('ai')}
+            >
+              <Brain color={activeView === 'ai' ? '#d946ef' : '#64748b'} size={15} />
+              <Text style={[styles.toggleText, activeView === 'ai' && styles.toggleTextActive]}>
+                AI 分析
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           <ScrollView
             contentContainerStyle={styles.scrollContainer}
             showsVerticalScrollIndicator={false}
           >
-            {/* ① 核心數據 */}
-            <SectionCard title="核心數據" icon={<Activity color="#06b6d4" size={16} />} color="rgba(6,182,212,">
-              <StatGrid items={[
-                { label: '距離', value: `${(detail.distance / 1000).toFixed(2)}`, sub: 'km' },
-                { label: '時間', value: formatDuration(detail.moving_time) },
-                { label: '均速配速', value: speedToPace(detail.average_speed), sub: '/km' },
-                { label: '最速配速', value: speedToPace(detail.max_speed), sub: '/km' },
-                { label: '爬升', value: `${Math.round(detail.total_elevation_gain)}`, sub: 'm' },
-                { label: '總時間', value: formatDuration(detail.elapsed_time) },
-              ]} />
-            </SectionCard>
+            {activeView === 'ai' ? (
+              <AIAnalysisView detail={detail} streams={streams} />
+            ) : (
+              <>
+                {/* ① 核心數據 */}
+                <SectionCard title="核心數據" icon={<Activity color="#06b6d4" size={16} />} color="rgba(6,182,212,">
+                  <StatGrid items={[
+                    { label: '距離', value: `${(detail.distance / 1000).toFixed(2)}`, sub: 'km' },
+                    { label: '時間', value: formatDuration(detail.moving_time) },
+                    { label: '均速配速', value: speedToPace(detail.average_speed), sub: '/km' },
+                    { label: '最速配速', value: speedToPace(detail.max_speed), sub: '/km' },
+                    { label: '爬升', value: `${Math.round(detail.total_elevation_gain)}`, sub: 'm' },
+                    { label: '總時間', value: formatDuration(detail.elapsed_time) },
+                  ]} />
+                </SectionCard>
 
-            {/* ② 心肺數據 */}
-            {(detail.average_heartrate || detail.average_cadence || detail.suffer_score) && (
-              <SectionCard title="心肺數據" icon={<Heart color="#f43f5e" size={16} />} color="rgba(244,63,94,">
-                <StatGrid items={[
-                  ...(detail.average_heartrate ? [
-                    { label: '平均心率', value: `${Math.round(detail.average_heartrate)}`, sub: 'bpm' },
-                    { label: '最高心率', value: `${Math.round(detail.max_heartrate ?? 0)}`, sub: 'bpm' },
-                  ] : []),
-                  ...(detail.average_cadence ? [
-                    { label: '平均步頻', value: `${Math.round(detail.average_cadence * 2)}`, sub: 'spm' },
-                  ] : []),
-                  ...(detail.suffer_score ? [
-                    { label: '痛苦指數', value: `${detail.suffer_score}` },
-                  ] : []),
-                  ...(detail.perceived_exertion ? [
-                    { label: '主觀疲勞', value: `${detail.perceived_exertion}`, sub: '/ 10' },
-                  ] : []),
-                ]} />
-              </SectionCard>
-            )}
-
-            {/* ③ 能量數據 */}
-            {(detail.calories || detail.kilojoules) && (
-              <SectionCard title="能量數據" icon={<Flame color="#f97316" size={16} />} color="rgba(249,115,22,">
-                <StatGrid items={[
-                  ...(detail.calories ? [{ label: '消耗卡路里', value: `${Math.round(detail.calories)}`, sub: 'kcal' }] : []),
-                  ...(detail.kilojoules ? [{ label: '輸出能量', value: `${Math.round(detail.kilojoules)}`, sub: 'kJ' }] : []),
-                ]} />
-              </SectionCard>
-            )}
-
-            {/* ④ 逐秒圖表 */}
-            {streams && (
-              <SectionCard title="逐秒走勢" icon={<Zap color="#22d3ee" size={16} />} color="rgba(34,211,238," collapsible>
-                {streams.heartrate?.data && (
-                  <StreamChart
-                    data={streams.heartrate.data}
-                    color="rgba(244,63,94,1)"
-                    label="心率"
-                    unit="bpm"
-                  />
+                {/* ② 心肺數據 */}
+                {(detail.average_heartrate || detail.average_cadence || detail.suffer_score) && (
+                  <SectionCard title="心肺數據" icon={<Heart color="#f43f5e" size={16} />} color="rgba(244,63,94,">
+                    <StatGrid items={[
+                      ...(detail.average_heartrate ? [
+                        { label: '平均心率', value: `${Math.round(detail.average_heartrate)}`, sub: 'bpm' },
+                        { label: '最高心率', value: `${Math.round(detail.max_heartrate ?? 0)}`, sub: 'bpm' },
+                      ] : []),
+                      ...(detail.average_cadence ? [
+                        { label: '平均步頻', value: `${Math.round(detail.average_cadence * 2)}`, sub: 'spm' },
+                      ] : []),
+                      ...(detail.suffer_score ? [
+                        { label: '痛苦指數', value: `${detail.suffer_score}` },
+                      ] : []),
+                      ...(detail.perceived_exertion ? [
+                        { label: '主觀疲勞', value: `${detail.perceived_exertion}`, sub: '/ 10' },
+                      ] : []),
+                    ]} />
+                  </SectionCard>
                 )}
-                {streams.velocity_smooth?.data && (
-                  <StreamChart
-                    data={streams.velocity_smooth.data.map(speedToPaceNum)}
-                    color="rgba(6,182,212,1)"
-                    label="配速（秒/公里）"
-                    unit="s/km"
-                  />
-                )}
-                {streams.altitude?.data && (
-                  <StreamChart
-                    data={streams.altitude.data}
-                    color="rgba(132,204,22,1)"
-                    label="海拔"
-                    unit="m"
-                  />
-                )}
-                {streams.cadence?.data && (
-                  <StreamChart
-                    data={streams.cadence.data.map(c => c * 2)}
-                    color="rgba(168,85,247,1)"
-                    label="步頻"
-                    unit="spm"
-                  />
-                )}
-                {streams.watts?.data && (
-                  <StreamChart
-                    data={streams.watts.data}
-                    color="rgba(251,191,36,1)"
-                    label="功率"
-                    unit="W"
-                  />
-                )}
-              </SectionCard>
-            )}
 
-            {/* ⑤ 每公里分段 */}
-            {detail.splits_metric && detail.splits_metric.length > 0 && (
-              <SectionCard title="每公里分段" icon={<TrendingUp color="#38bdf8" size={16} />} color="rgba(56,189,248," collapsible>
-                <View style={styles.splitsHeader}>
-                  <Text style={[styles.splitCell, styles.splitHeaderText]}>公里</Text>
-                  <Text style={[styles.splitCell, styles.splitHeaderText]}>配速</Text>
-                  <Text style={[styles.splitCell, styles.splitHeaderText]}>時間</Text>
-                  <Text style={[styles.splitCell, styles.splitHeaderText]}>心率</Text>
-                  <Text style={[styles.splitCell, styles.splitHeaderText]}>爬升</Text>
-                </View>
-                {detail.splits_metric.map((split) => (
-                  <View key={split.split} style={styles.splitRow}>
-                    <Text style={styles.splitCell}>{split.split}</Text>
-                    <Text style={[styles.splitCell, { color: '#06b6d4' }]}>
-                      {speedToPace(split.average_speed)}
-                    </Text>
-                    <Text style={styles.splitCell}>{formatDuration(split.moving_time)}</Text>
-                    <Text style={styles.splitCell}>
-                      {split.average_heartrate ? `${Math.round(split.average_heartrate)}` : '--'}
-                    </Text>
-                    <Text style={[styles.splitCell, {
-                      color: split.elevation_difference > 0 ? '#f97316' : '#22d3ee'
-                    }]}>
-                      {split.elevation_difference > 0 ? '+' : ''}{Math.round(split.elevation_difference)}m
-                    </Text>
-                  </View>
-                ))}
-              </SectionCard>
-            )}
+                {/* ③ 能量數據 */}
+                {(detail.calories || detail.kilojoules) && (
+                  <SectionCard title="能量數據" icon={<Flame color="#f97316" size={16} />} color="rgba(249,115,22,">
+                    <StatGrid items={[
+                      ...(detail.calories ? [{ label: '消耗卡路里', value: `${Math.round(detail.calories)}`, sub: 'kcal' }] : []),
+                      ...(detail.kilojoules ? [{ label: '輸出能量', value: `${Math.round(detail.kilojoules)}`, sub: 'kJ' }] : []),
+                    ]} />
+                  </SectionCard>
+                )}
 
-            {/* ⑥ 最佳成績 */}
-            {detail.best_efforts && detail.best_efforts.length > 0 && (
-              <SectionCard title="最佳成績" icon={<Wind color="#c084fc" size={16} />} color="rgba(192,132,252," collapsible>
-                {detail.best_efforts.map((effort, i) => (
-                  <View key={i} style={styles.effortRow}>
-                    <Text style={styles.effortName}>{effort.name}</Text>
-                    <Text style={styles.effortTime}>{formatDuration(effort.moving_time)}</Text>
-                  </View>
-                ))}
-              </SectionCard>
-            )}
+                {/* ④ 逐秒走勢 */}
+                {streams && (
+                  <SectionCard title="逐秒走勢" icon={<Zap color="#22d3ee" size={16} />} color="rgba(34,211,238," collapsible>
+                    {streams.heartrate?.data && (
+                      <StreamChart data={streams.heartrate.data} color="rgba(244,63,94,1)" label="心率" unit="bpm" />
+                    )}
+                    {streams.velocity_smooth?.data && (
+                      <StreamChart data={streams.velocity_smooth.data.map(speedToPaceNum)} color="rgba(6,182,212,1)" label="配速（秒/公里）" unit="s/km" />
+                    )}
+                    {streams.altitude?.data && (
+                      <StreamChart data={streams.altitude.data} color="rgba(132,204,22,1)" label="海拔" unit="m" />
+                    )}
+                    {streams.cadence?.data && (
+                      <StreamChart data={streams.cadence.data.map(c => c * 2)} color="rgba(168,85,247,1)" label="步頻" unit="spm" />
+                    )}
+                    {streams.watts?.data && (
+                      <StreamChart data={streams.watts.data} color="rgba(251,191,36,1)" label="功率" unit="W" />
+                    )}
+                  </SectionCard>
+                )}
 
-            {/* ⑦ 裝置資訊 */}
-            {detail.device_name && (
-              <SectionCard title="裝置" icon={<Clock color="#94a3b8" size={16} />} color="rgba(148,163,184,">
-                <Text style={styles.deviceText}>{detail.device_name}</Text>
-              </SectionCard>
-            )}
+                {/* ⑤ 每公里分段 */}
+                {detail.splits_metric && detail.splits_metric.length > 0 && (
+                  <SectionCard title="每公里分段" icon={<TrendingUp color="#38bdf8" size={16} />} color="rgba(56,189,248," collapsible>
+                    <View style={styles.splitsHeader}>
+                      <Text style={[styles.splitCell, styles.splitHeaderText]}>公里</Text>
+                      <Text style={[styles.splitCell, styles.splitHeaderText]}>配速</Text>
+                      <Text style={[styles.splitCell, styles.splitHeaderText]}>時間</Text>
+                      <Text style={[styles.splitCell, styles.splitHeaderText]}>心率</Text>
+                      <Text style={[styles.splitCell, styles.splitHeaderText]}>爬升</Text>
+                    </View>
+                    {detail.splits_metric.map((split) => (
+                      <View key={split.split} style={styles.splitRow}>
+                        <Text style={styles.splitCell}>{split.split}</Text>
+                        <Text style={[styles.splitCell, { color: '#06b6d4' }]}>
+                          {speedToPace(split.average_speed)}
+                        </Text>
+                        <Text style={styles.splitCell}>{formatDuration(split.moving_time)}</Text>
+                        <Text style={styles.splitCell}>
+                          {split.average_heartrate ? `${Math.round(split.average_heartrate)}` : '--'}
+                        </Text>
+                        <Text style={[styles.splitCell, {
+                          color: split.elevation_difference > 0 ? '#f97316' : '#22d3ee'
+                        }]}>
+                          {split.elevation_difference > 0 ? '+' : ''}{Math.round(split.elevation_difference)}m
+                        </Text>
+                      </View>
+                    ))}
+                  </SectionCard>
+                )}
 
+                {/* ⑥ 最佳成績 */}
+                {detail.best_efforts && detail.best_efforts.length > 0 && (
+                  <SectionCard title="最佳成績" icon={<Wind color="#c084fc" size={16} />} color="rgba(192,132,252," collapsible>
+                    {detail.best_efforts.map((effort, i) => (
+                      <View key={i} style={styles.effortRow}>
+                        <Text style={styles.effortName}>{effort.name}</Text>
+                        <Text style={styles.effortTime}>{formatDuration(effort.moving_time)}</Text>
+                      </View>
+                    ))}
+                  </SectionCard>
+                )}
+
+                {/* ⑦ 裝置資訊 */}
+                {detail.device_name && (
+                  <SectionCard title="裝置" icon={<Clock color="#94a3b8" size={16} />} color="rgba(148,163,184,">
+                    <Text style={styles.deviceText}>{detail.device_name}</Text>
+                  </SectionCard>
+                )}
+              </>
+            )}
           </ScrollView>
         </SafeAreaView>
       </View>
     </SafeAreaProvider>
   );
 }
-
-// 速度(m/s) → 秒/公里（給圖表用）
-const speedToPaceNum = (speed: number): number => {
-  if (!speed || speed === 0) return 0;
-  return Math.round(1000 / speed);
-};
 
 // ────────── 樣式 ──────────
 const styles = StyleSheet.create({
@@ -488,6 +698,27 @@ const styles = StyleSheet.create({
   headerTitle: { flex: 1 },
   headerName: { fontSize: 17, fontWeight: '700', color: '#ffffff' },
   headerDate: { fontSize: 12, color: '#64748b', marginTop: 2 },
+
+  // 切換列
+  toggleBar: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 14,
+    padding: 4,
+  },
+  toggleBtn: {
+    flex: 1, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 10, borderRadius: 10, gap: 6,
+  },
+  toggleBtnActive: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  toggleText: { fontSize: 14, fontWeight: '500', color: '#64748b' },
+  toggleTextActive: { color: '#ffffff', fontWeight: '600' },
+
   scrollContainer: { paddingHorizontal: 16, paddingBottom: 40 },
 
   // Section Card
@@ -510,8 +741,7 @@ const styles = StyleSheet.create({
   // Stat Grid
   statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 1 },
   statGridItem: {
-    width: '33%', alignItems: 'center',
-    paddingVertical: 12,
+    width: '33%', alignItems: 'center', paddingVertical: 12,
     backgroundColor: 'rgba(255,255,255,0.04)',
     marginBottom: 1, marginRight: 1,
   },
@@ -549,4 +779,27 @@ const styles = StyleSheet.create({
 
   // Device
   deviceText: { fontSize: 14, color: '#94a3b8' },
+
+  // AI 分析
+  aiCard: {
+    borderRadius: 20, padding: 16, marginBottom: 14,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    overflow: 'hidden', backgroundColor: 'rgba(15,23,42,0.5)',
+  },
+  aiCardHeader: {
+    flexDirection: 'row', alignItems: 'center', marginBottom: 14,
+  },
+  analyzeBtn: {
+    borderWidth: 1, borderRadius: 12,
+    paddingVertical: 12, alignItems: 'center',
+  },
+  analyzeBtnText: { fontSize: 14, fontWeight: '600' },
+  aiLoading: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', gap: 10, paddingVertical: 16,
+  },
+  aiLoadingText: { color: '#94a3b8', fontSize: 14 },
+  aiResult: { fontSize: 14, color: '#cbd5e1', lineHeight: 24 },
+  reanalyzeBtn: { marginTop: 12, alignItems: 'center', paddingVertical: 8 },
+  reanalyzeBtnText: { fontSize: 13, color: '#475569' },
 });
